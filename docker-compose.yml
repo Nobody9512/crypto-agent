@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  crypto-news-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crypto-news-bot
+    restart: unless-stopped
+    volumes:
+      - ./:/app
+      - crypto-news-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Tashkent
+
+volumes:
+  crypto-news-data:
+    name: crypto-news-data 

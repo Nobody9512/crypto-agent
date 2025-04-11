@@ -12,7 +12,8 @@ RSS_SOURCES = {
     "CoinTelegraph": "https://cointelegraph.com/rss"
 }
 
-OPENAI_MODEL = "gpt-4o-mini-2024-07-18"
+# Get OpenAI model from environment variable with fallback
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini-2024-07-18")
 
 async def fetch_rss_feeds(limit=5):
     """

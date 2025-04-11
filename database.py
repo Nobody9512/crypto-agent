@@ -2,7 +2,8 @@ import aiosqlite
 import os
 from datetime import datetime
 
-DATABASE_NAME = "crypto_news.db"
+# Get database path from environment variable with fallback to default
+DATABASE_NAME = os.getenv("DATABASE_NAME", "crypto_news.db")
 
 # Default value for importance threshold
 DEFAULT_IMPORTANCE_THRESHOLD = 0.7

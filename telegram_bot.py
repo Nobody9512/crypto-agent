@@ -1,5 +1,8 @@
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 import os
 import asyncio
 from aiogram.enums import ParseMode
@@ -13,9 +16,16 @@ load_dotenv()
 # User ID to send notifications to
 TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID")
 
+# States for setting threshold
+class ThresholdStates(StatesGroup):
+    waiting_for_threshold = State()
+
+# Create memory storage for FSM
+storage = MemoryStorage()
+
 # Bot and dispatcher will be initialized later
 bot = None
-dp = Dispatcher()
+dp = Dispatcher(storage=storage)
 
 # For stopping the bot
 stop_event = asyncio.Event()
@@ -45,6 +55,8 @@ async def send_help(message: types.Message):
     /start - Botni ishga tushirish
     /help - Yordam ko'rsatish
     /latest - Oxirgi muhim yangiliklar
+    /current_threshold - Hozirgi muhimlik darajasini ko'rsatish
+    /threshold - Muhimlik darajasini o'zgartirish (0.0-1.0)
     """
     await message.answer(help_text)
 
@@ -68,6 +80,78 @@ async def send_latest_news(message: types.Message):
             news['importance_score'],
             None  # Key points not available from database
         )
+
+@dp.message(Command("threshold"))
+async def cmd_threshold(message: types.Message, state: FSMContext):
+    """Command to change the importance threshold."""
+    # Check if the user is authorized
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        await message.answer("Bu buyruqni faqat bot egasi ishlatishi mumkin.")
+        return
+    
+    # Get current threshold
+    current_threshold = await database.get_importance_threshold()
+    
+    await message.answer(
+        f"Hozirgi muhimlik darajasi: {current_threshold:.2f}\n\n"
+        f"Yangi qiymatni kiriting (0.0-1.0 oralig'ida):"
+    )
+    
+    # Set the state to waiting for threshold
+    await state.set_state(ThresholdStates.waiting_for_threshold)
+
+@dp.message(ThresholdStates.waiting_for_threshold)
+async def process_threshold(message: types.Message, state: FSMContext):
+    """Process the threshold value entered by the user."""
+    # Check if the user is authorized
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        await state.clear()
+        return
+    
+    # Get the threshold value from the message
+    threshold_str = message.text.strip()
+    
+    # Try to set the new threshold value
+    success, result = await database.set_importance_threshold(threshold_str)
+    
+    if success:
+        await message.answer(
+            f"✅ Muhimlik darajasi muvaffaqiyatli o'zgartirildi: {result:.2f}"
+        )
+    else:
+        await message.answer(
+            f"❌ Xato: {result}\n\n"
+            f"Iltimos, 0.0 dan 1.0 gacha bo'lgan son kiriting."
+        )
+    
+    # Clear the state
+    await state.clear()
+
+@dp.message(Command("current_threshold"))
+async def cmd_current_threshold(message: types.Message):
+    """Show the current importance threshold."""
+    # Check if the user is authorized
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        return
+    
+    # Get current threshold
+    current_threshold = await database.get_importance_threshold()
+    
+    # Explain what different threshold values mean
+    explanation = f"""
+<b>Hozirgi muhimlik darajasi:</b> {current_threshold:.2f}
+
+<i>Muhimlik darajasi qiymatlari:</i>
+• 0.1-0.3: Juda past (deyarli barcha yangiliklar)
+• 0.3-0.5: Past (ko'p yangiliklar)
+• 0.5-0.7: O'rta (muhim yangiliklar)
+• 0.7-0.8: Yuqori (juda muhim yangiliklar)
+• 0.8-1.0: Juda yuqori (eng muhim yangiliklar)
+
+Muhimlik darajasini o'zgartirish uchun /threshold buyrug'ini ishlating.
+    """
+    
+    await message.answer(explanation, parse_mode=ParseMode.HTML)
 
 async def send_news_notification(bot, user_id, title, link, summary, source, importance_score, key_points=None):
     """Send a notification about important crypto news."""

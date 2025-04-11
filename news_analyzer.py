@@ -12,7 +12,6 @@ RSS_SOURCES = {
     "CoinTelegraph": "https://cointelegraph.com/rss"
 }
 
-IMPORTANCE_THRESHOLD = 0.3
 OPENAI_MODEL = "gpt-4o-mini-2024-07-18"
 
 async def fetch_rss_feeds(limit=5):
@@ -177,8 +176,11 @@ async def process_news_entry(entry):
     # Save to database (without key_points)
     await database.save_news(title, link, published, summary, source, importance_score, None)
     
+    # Get current importance threshold
+    threshold = await database.get_importance_threshold()
+    
     # Return the entry if it's important enough
-    if importance_score >= IMPORTANCE_THRESHOLD:  # Threshold for important news
+    if importance_score >= threshold:  # Dynamic threshold from database
         return {
             'title': title,
             'link': link,

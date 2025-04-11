@@ -163,6 +163,12 @@ async def analyze_callback(callback: types.CallbackQuery):
     
     news_data = news_cache[news_id]
     
+    # Remove the keyboard from original message
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception as e:
+        print(f"Error removing keyboard: {e}")
+    
     # Perform price impact analysis
     from news_analyzer import analyze_price_impact
     impact_analysis = await analyze_price_impact(news_data['title'], news_data['summary'])

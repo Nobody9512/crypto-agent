@@ -13,6 +13,7 @@ RSS_SOURCES = {
 }
 
 IMPORTANCE_THRESHOLD = 0.3
+OPENAI_MODEL = "gpt-4o-mini-2024-07-18"
 
 async def fetch_rss_feeds(limit=5):
     """
@@ -80,9 +81,9 @@ async def analyze_news_importance(title, summary):
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=OPENAI_MODEL,
             messages=[
-                {"role": "system", "content": "You are a cryptocurrency market analyst who evaluates news impact on crypto prices."},
+                {"role": "system", "content": "You are a cryptocurrency market analyst who evaluates news impact on crypto prices. Only respond with a numeric score between 0 and 1."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=10
@@ -143,7 +144,7 @@ async def analyze_price_impact(title, summary):
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": "You are a cryptocurrency market analyst who predicts price movements based on news."},
                 {"role": "user", "content": prompt}
@@ -177,7 +178,7 @@ async def process_news_entry(entry):
     await database.save_news(title, link, published, summary, source, importance_score, None)
     
     # Return the entry if it's important enough
-    if importance_score >= 0.7:  # Threshold for important news
+    if importance_score >= IMPORTANCE_THRESHOLD:  # Threshold for important news
         return {
             'title': title,
             'link': link,

@@ -5,6 +5,7 @@ import asyncio
 from aiogram.enums import ParseMode
 from dotenv import load_dotenv
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import database
 
 # Load environment variables
 load_dotenv()
@@ -18,9 +19,6 @@ dp = Dispatcher()
 
 # For stopping the bot
 stop_event = asyncio.Event()
-
-# Dictionary to store news data for callback queries
-news_cache = {}
 
 async def initialize_bot():
     """Initialize the bot with token from environment variables."""
@@ -53,7 +51,6 @@ async def send_help(message: types.Message):
 @dp.message(Command("latest"))
 async def send_latest_news(message: types.Message):
     """Send the latest important news."""
-    import database
     news_items = await database.get_important_news(hours=24)
     
     if not news_items:
@@ -93,13 +90,8 @@ async def send_news_notification(bot, user_id, title, link, summary, source, imp
     import hashlib
     news_id = hashlib.md5(f"{title}:{link}".encode()).hexdigest()[:10]
     
-    # Store the news data in the cache for later use
-    news_cache[news_id] = {
-        'title': title,
-        'link': link,
-        'summary': summary,
-        'source': source
-    }
+    # Store the news data in the database for later use in callbacks
+    await database.save_callback_data(news_id, title, link, summary, source)
     
     # Create inline keyboard with Cancel and Analyze buttons
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -143,9 +135,8 @@ async def cancel_callback(callback: types.CallbackQuery):
     # Answer callback query
     await callback.answer("Bekor qilindi")
     
-    # Remove from cache
-    if news_id in news_cache:
-        del news_cache[news_id]
+    # Remove from database
+    await database.delete_callback_data(news_id)
 
 @dp.callback_query(F.data.startswith("analyze:"))
 async def analyze_callback(callback: types.CallbackQuery):
@@ -156,12 +147,12 @@ async def analyze_callback(callback: types.CallbackQuery):
     # Answer callback query to show processing
     await callback.answer("Tahlil qilinmoqda...")
     
-    # Get news data from cache
-    if news_id not in news_cache:
+    # Get news data from database
+    news_data = await database.get_callback_data(news_id)
+    
+    if not news_data:
         await callback.message.reply("Xatolik: Ma'lumot topilmadi.")
         return
-    
-    news_data = news_cache[news_id]
     
     # Remove the keyboard from original message
     try:
@@ -178,6 +169,10 @@ async def analyze_callback(callback: types.CallbackQuery):
         f"<b>💹 Narx ta'siri tahlili:</b>\n\n{impact_analysis}", 
         parse_mode=ParseMode.HTML
     )
+    
+    # Cleanup after sending analysis (optional)
+    # If you want to keep the data for future reference, comment out this line
+    # await database.delete_callback_data(news_id)
 
 async def notify_about_important_news(news_items):
     """Send notifications about important news to the specified user."""
@@ -217,6 +212,9 @@ async def start_bot():
     
     if bot is None:
         bot = await initialize_bot()
+    
+    # Clean up old callback data (older than 7 days)
+    await database.cleanup_old_callback_data(days=7)
     
     # Starting bot with polling mode
     try:

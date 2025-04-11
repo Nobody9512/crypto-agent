@@ -4,6 +4,7 @@ import os
 import asyncio
 from aiogram.enums import ParseMode
 from dotenv import load_dotenv
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Load environment variables
 load_dotenv()
@@ -17,6 +18,9 @@ dp = Dispatcher()
 
 # For stopping the bot
 stop_event = asyncio.Event()
+
+# Dictionary to store news data for callback queries
+news_cache = {}
 
 async def initialize_bot():
     """Initialize the bot with token from environment variables."""
@@ -76,17 +80,34 @@ async def send_news_notification(bot, user_id, title, link, summary, source, imp
     message_text += f"<i>Muhimlik: {importance_score:.2f}/1.0</i>\n"
     message_text += f"Manba: {source}\n\n"
     
-    # Add key points if available
-    if key_points:
-        message_text += f"<b>Asosiy xulosalar:</b>\n{key_points}\n\n"
-    # Otherwise add summary (limited length)
-    elif summary:
+    # Add summary (limited length)
+    if summary:
         # Limit summary length
         if len(summary) > 200:
             summary = summary[:197] + "..."
         message_text += f"{summary}\n\n"
     
     message_text += f"<a href='{link}'>Batafsil o'qish</a>"
+    
+    # Create a unique ID for this news item
+    import hashlib
+    news_id = hashlib.md5(f"{title}:{link}".encode()).hexdigest()[:10]
+    
+    # Store the news data in the cache for later use
+    news_cache[news_id] = {
+        'title': title,
+        'link': link,
+        'summary': summary,
+        'source': source
+    }
+    
+    # Create inline keyboard with Cancel and Analyze buttons
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="❌ Cancel", callback_data=f"cancel:{news_id}"),
+            InlineKeyboardButton(text="📊 Analiz", callback_data=f"analyze:{news_id}")
+        ]
+    ])
     
     try:
         print(f"Sending notification to user_id: {user_id} (type: {type(user_id)})")
@@ -96,17 +117,61 @@ async def send_news_notification(bot, user_id, title, link, summary, source, imp
             print(f"Converting user_id from string: '{user_id}' to integer")
             user_id = int(user_id)
         
-        # Send message
+        # Send message with inline keyboard
         await bot.send_message(
             chat_id=user_id,
             text=message_text,
             parse_mode=ParseMode.HTML,
-            disable_web_page_preview=False
+            disable_web_page_preview=False,
+            reply_markup=keyboard
         )
         print(f"Successfully sent notification about: {title}")
     except Exception as e:
         print(f"Failed to send notification: {e}")
         print(f"Details - user_id: {user_id}, title: {title}, link: {link}")
+
+# Register callback query handlers for buttons
+@dp.callback_query(F.data.startswith("cancel:"))
+async def cancel_callback(callback: types.CallbackQuery):
+    """Handle cancel button press"""
+    # Extract news_id from callback data
+    news_id = callback.data.split(":")[1]
+    
+    # Remove the keyboard
+    await callback.message.edit_reply_markup(reply_markup=None)
+    
+    # Answer callback query
+    await callback.answer("Bekor qilindi")
+    
+    # Remove from cache
+    if news_id in news_cache:
+        del news_cache[news_id]
+
+@dp.callback_query(F.data.startswith("analyze:"))
+async def analyze_callback(callback: types.CallbackQuery):
+    """Handle analyze button press"""
+    # Extract news_id from callback data
+    news_id = callback.data.split(":")[1]
+    
+    # Answer callback query to show processing
+    await callback.answer("Tahlil qilinmoqda...")
+    
+    # Get news data from cache
+    if news_id not in news_cache:
+        await callback.message.reply("Xatolik: Ma'lumot topilmadi.")
+        return
+    
+    news_data = news_cache[news_id]
+    
+    # Perform price impact analysis
+    from news_analyzer import analyze_price_impact
+    impact_analysis = await analyze_price_impact(news_data['title'], news_data['summary'])
+    
+    # Send the analysis result
+    await callback.message.reply(
+        f"<b>💹 Narx ta'siri tahlili:</b>\n\n{impact_analysis}", 
+        parse_mode=ParseMode.HTML
+    )
 
 async def notify_about_important_news(news_items):
     """Send notifications about important news to the specified user."""

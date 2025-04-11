@@ -80,7 +80,7 @@ async def analyze_news_importance(title, summary):
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
         response = client.chat.completions.create(
-            model="gpt-4o-mini-2024-07-18",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a cryptocurrency market analyst who evaluates news impact on crypto prices."},
                 {"role": "user", "content": prompt}
@@ -105,19 +105,37 @@ async def analyze_news_importance(title, summary):
         # Default to moderate importance on error
         return 0.5
 
-async def extract_key_points(title, summary):
+async def analyze_price_impact(title, summary):
     """
-    Extract key points from news using OpenAI to highlight important aspects.
-    Returns a concise summary of the most important points.
+    Analyze how the news could impact cryptocurrency prices for BTC, ETH, SOL, and LTC.
+    Returns a detailed analysis of potential price movements.
     """
     prompt = f"""
-    Analyze the following cryptocurrency news and extract the 2-3 most important facts or implications for crypto markets.
-    Focus on regulatory changes, adoption news, market impacts, or security issues.
+    Analyze the following cryptocurrency news and predict its potential impact on the prices of:
+    1. Bitcoin (BTC)
+    2. Ethereum (ETH)
+    3. Solana (SOL)
+    4. Litecoin (LTC)
+    
+    For each cryptocurrency, predict whether the price might:
+    - 📈 Go up (positive impact)
+    - 📉 Go down (negative impact)
+    - ➡️ Remain stable (neutral impact)
+    
+    Consider regulatory news, adoption news, market sentiment, technical developments, etc.
     
     Title: {title}
     Summary: {summary}
     
-    Return only the key points in bullet format in Uzbek language:
+    Provide a detailed analysis in UZBEK LANGUAGE with reasoning for each cryptocurrency's price prediction.
+    Format your response as follows:
+    
+    Bitcoin (BTC): [prediction emoji] [short explanation in Uzbek]
+    Ethereum (ETH): [prediction emoji] [short explanation in Uzbek]
+    Solana (SOL): [prediction emoji] [short explanation in Uzbek]
+    Litecoin (LTC): [prediction emoji] [short explanation in Uzbek]
+    
+    Umumiy xulosa: [general conclusion about overall market impact in Uzbek]
     """
     
     try:
@@ -125,20 +143,20 @@ async def extract_key_points(title, summary):
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
         response = client.chat.completions.create(
-            model="gpt-4o-mini-2024-07-18",
+            model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a cryptocurrency analyst who extracts key insights from news."},
+                {"role": "system", "content": "You are a cryptocurrency market analyst who predicts price movements based on news."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=200
+            max_tokens=500
         )
         
-        # Get key points from new API structure
-        key_points = response.choices[0].message.content.strip()
-        return key_points
+        # Get analysis from API response
+        analysis = response.choices[0].message.content.strip()
+        return analysis
     except Exception as e:
-        print(f"Error extracting key points: {e}")
-        return "• Xabar tahlil qilinmadi"
+        print(f"Error analyzing price impact: {e}")
+        return "⚠️ Tahlil qilishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring."
 
 async def process_news_entry(entry):
     """Process a single news entry from RSS feed."""
@@ -155,24 +173,18 @@ async def process_news_entry(entry):
     # Analyze news importance
     importance_score = await analyze_news_importance(title, summary)
     
-    # Extract key points for important news
-    key_points = None
-    if importance_score >= IMPORTANCE_THRESHOLD:  # Only for important news
-        key_points = await extract_key_points(title, summary)
-    
-    # Save to database
-    await database.save_news(title, link, published, summary, source, importance_score, key_points)
+    # Save to database (without key_points)
+    await database.save_news(title, link, published, summary, source, importance_score, None)
     
     # Return the entry if it's important enough
-    if importance_score >= IMPORTANCE_THRESHOLD:  # Threshold for important news
+    if importance_score >= 0.7:  # Threshold for important news
         return {
             'title': title,
             'link': link,
             'published': published,
             'summary': summary,
             'source': source,
-            'importance_score': importance_score,
-            'key_points': key_points
+            'importance_score': importance_score
         }
     return None
 

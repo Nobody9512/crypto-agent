@@ -172,7 +172,7 @@ async def analyze_callback(callback: types.CallbackQuery):
     
     # Cleanup after sending analysis (optional)
     # If you want to keep the data for future reference, comment out this line
-    # await database.delete_callback_data(news_id)
+    await database.delete_callback_data(news_id)
 
 async def notify_about_important_news(news_items):
     """Send notifications about important news to the specified user."""

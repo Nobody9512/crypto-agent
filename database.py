@@ -97,3 +97,12 @@ async def cleanup_old_callback_data(days=7):
         WHERE datetime(created_at) < datetime('now', ?)
         ''', (f'-{days} days',))
         await db.commit() 
+
+async def delete_callback_data(news_id):
+    try:
+        """Delete news data from callback cache by news_id."""
+        async with aiosqlite.connect(DATABASE_NAME) as db:
+            await db.execute('DELETE FROM callback_cache WHERE news_id = ?', (news_id,))
+            await db.commit()
+    except Exception as e:
+        print(f"Error deleting callback data: {e}")

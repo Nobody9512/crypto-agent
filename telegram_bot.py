@@ -85,8 +85,16 @@ Admin buyruqlari:
         'settings_title': "⚙️ Bot Sozlamalari",
         'settings_threshold': "🔢 Muhimlik darajasi: {threshold:.2f}",
         'settings_language': "🌐 Til: {language}",
+        'settings_notifications': "🔔 Bildirishnomalar: {status}",
         'btn_change_threshold': "🔢 Muhimlik darajasini o'zgartirish",
         'btn_change_language': "🌐 Tilni o'zgartirish",
+        'btn_change_notifications': "🔔 Bildirishnomalarni {action}",
+        'notifications_enabled': "Yoqilgan",
+        'notifications_disabled': "O'chirilgan",
+        'notifications_enable': "yoqish",
+        'notifications_disable': "o'chirish",
+        'notifications_enabled_message': "✅ Bildirishnomalar yoqildi. Endi siz muhim yangiliklar haqida xabar olasiz.",
+        'notifications_disabled_message': "❌ Bildirishnomalar o'chirildi. Endi siz muhim yangiliklar haqida xabar olmaysiz.",
         'no_news': "Hozirda muhim yangiliklar yo'q.",
         'admin_only': "Bu buyruqni faqat bot egasi ishlatishi mumkin.",
         'threshold_current': "Hozirgi muhimlik darajasi: {threshold:.2f}\n\nYangi qiymatni kiriting (0.0-1.0 oralig'ida):",
@@ -115,7 +123,9 @@ Admin buyruqlari:
         'cancel_news': "Bekor qilindi",
         'analyzing': "Tahlil qilinmoqda...",
         'error_data_not_found': "Xatolik: Ma'lumot topilmadi.",
-        'price_impact_analysis': "💹 Narx ta'siri tahlili:"
+        'price_impact_analysis': "💹 Narx ta'siri tahlili:",
+        'insufficient_balance': "❌ Balans yetarli emas. Analiz uchun kamida 0.01 USDT kerak.\n\nJoriy balans: {balance} USDT\n\nHisobingizni to'ldiring va qaytadan urinib ko'ring.",
+        'analysis_fee': "💰 Analiz narxi: 0.01 USDT\n\n"
     },
     'ru': {
         'welcome_admin': "Привет, Администратор! Я бот криптовалютных новостей. Ваш ID: {user_id}",
@@ -160,8 +170,16 @@ Admin buyruqlari:
         'settings_title': "⚙️ Настройки бота",
         'settings_threshold': "🔢 Порог важности: {threshold:.2f}",
         'settings_language': "🌐 Язык: {language}",
+        'settings_notifications': "🔔 Уведомления: {status}",
         'btn_change_threshold': "🔢 Изменить порог важности",
         'btn_change_language': "🌐 Изменить язык",
+        'btn_change_notifications': "🔔 {action} уведомления",
+        'notifications_enabled': "Включены",
+        'notifications_disabled': "Выключены",
+        'notifications_enable': "Включить",
+        'notifications_disable': "Выключить",
+        'notifications_enabled_message': "✅ Уведомления включены. Теперь вы будете получать важные новости.",
+        'notifications_disabled_message': "❌ Уведомления выключены. Вы больше не будете получать важные новости.",
         'no_news': "В настоящее время нет важных новостей.",
         'admin_only': "Эта команда доступна только владельцу бота.",
         'threshold_current': "Текущий порог важности: {threshold:.2f}\n\nВведите новое значение (в диапазоне 0.0-1.0):",
@@ -190,7 +208,9 @@ Admin buyruqlari:
         'cancel_news': "Отменено",
         'analyzing': "Анализирую...",
         'error_data_not_found': "Ошибка: Данные не найдены.",
-        'price_impact_analysis': "💹 Анализ влияния на цену:"
+        'price_impact_analysis': "💹 Анализ влияния на цену:",
+        'insufficient_balance': "❌ Недостаточно средств. Для анализа требуется минимум 0.01 USDT.\n\nТекущий баланс: {balance} USDT\n\nПополните счет и попробуйте снова.",
+        'analysis_fee': "💰 Стоимость анализа: 0.01 USDT\n\n"
     },
     'en': {
         'welcome_admin': "Hello, Admin! I'm a crypto news bot. Your ID: {user_id}",
@@ -235,8 +255,16 @@ Admin commands:
         'settings_title': "⚙️ Bot Settings",
         'settings_threshold': "🔢 Importance threshold: {threshold:.2f}",
         'settings_language': "🌐 Language: {language}",
+        'settings_notifications': "🔔 Notifications: {status}",
         'btn_change_threshold': "🔢 Change importance threshold",
         'btn_change_language': "🌐 Change language",
+        'btn_change_notifications': "🔔 {action} notifications",
+        'notifications_enabled': "Enabled",
+        'notifications_disabled': "Disabled",
+        'notifications_enable': "Enable",
+        'notifications_disable': "Disable",
+        'notifications_enabled_message': "✅ Notifications enabled. You will now receive important news.",
+        'notifications_disabled_message': "❌ Notifications disabled. You will no longer receive important news.",
         'no_news': "There are no important news at the moment.",
         'admin_only': "This command is available only to the bot owner.",
         'threshold_current': "Current importance threshold: {threshold:.2f}\n\nEnter a new value (in the range 0.0-1.0):",
@@ -265,7 +293,9 @@ Admin commands:
         'cancel_news': "Cancelled",
         'analyzing': "Analyzing...",
         'error_data_not_found': "Error: Data not found.",
-        'price_impact_analysis': "💹 Price impact analysis:"
+        'price_impact_analysis': "💹 Price impact analysis:",
+        'insufficient_balance': "❌ Insufficient balance. Analysis requires at least 0.01 USDT.\n\nCurrent balance: {balance} USDT\n\nPlease top up your account and try again.",
+        'analysis_fee': "💰 Analysis fee: 0.01 USDT\n\n"
     }
 }
 
@@ -370,12 +400,20 @@ async def cmd_settings(message: types.Message):
         language = await database.get_user_language(user_id)
         language_display = language_names.get(language, language)
         
+        # Get notification status
+        notification_status = await database.get_user_notification_status(user_id)
+        notification_status_text = await get_text('notifications_enabled', user_id) if notification_status else await get_text('notifications_disabled', user_id)
+        notification_action = await get_text('notifications_disable', user_id) if notification_status else await get_text('notifications_enable', user_id)
+        
         settings_text = await get_text('settings_title', user_id) + "\n\n"
-        settings_text += await get_text('settings_language', user_id, language=language_display)
+        settings_text += await get_text('settings_language', user_id, language=language_display) + "\n"
+        settings_text += await get_text('settings_notifications', user_id, status=notification_status_text)
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=await get_text('btn_change_language', user_id), 
-                                callback_data="settings:change_language")]
+                                callback_data="settings:change_language")],
+            [InlineKeyboardButton(text=await get_text('btn_change_notifications', user_id, action=notification_action), 
+                                callback_data=f"settings:toggle_notifications:{0 if notification_status else 1}")]
         ])
         
         await message.answer(settings_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
@@ -386,15 +424,23 @@ async def cmd_settings(message: types.Message):
     language = await database.get_user_language(user_id)
     language_display = language_names.get(language, language)
     
+    # Get notification status
+    notification_status = await database.get_user_notification_status(user_id)
+    notification_status_text = await get_text('notifications_enabled', user_id) if notification_status else await get_text('notifications_disabled', user_id)
+    notification_action = await get_text('notifications_disable', user_id) if notification_status else await get_text('notifications_enable', user_id)
+    
     settings_text = await get_text('settings_title', user_id) + "\n\n"
     settings_text += await get_text('settings_threshold', user_id, threshold=threshold) + "\n"
-    settings_text += await get_text('settings_language', user_id, language=language_display)
+    settings_text += await get_text('settings_language', user_id, language=language_display) + "\n"
+    settings_text += await get_text('settings_notifications', user_id, status=notification_status_text)
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=await get_text('btn_change_threshold', user_id), 
                             callback_data="admin:set_threshold")],
         [InlineKeyboardButton(text=await get_text('btn_change_language', user_id), 
-                            callback_data="settings:change_language")]
+                            callback_data="settings:change_language")],
+        [InlineKeyboardButton(text=await get_text('btn_change_notifications', user_id, action=notification_action), 
+                            callback_data=f"settings:toggle_notifications:{0 if notification_status else 1}")]
     ])
     
     await message.answer(settings_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
@@ -469,6 +515,27 @@ async def set_language_callback(callback: types.CallbackQuery):
                 (await get_text('welcome_user', user_id)).format(user_id=user_id),
                 reply_markup=keyboard
             )
+    
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("settings:toggle_notifications:"))
+async def toggle_notifications_callback(callback: types.CallbackQuery):
+    """Handle toggle notifications button press."""
+    user_id = callback.from_user.id
+    new_status = int(callback.data.split(':')[2])
+    
+    # Update user notification status in database
+    success = await database.set_user_notification_status(user_id, new_status)
+    
+    if success:
+        # Show success message
+        if new_status:
+            await callback.message.answer(await get_text('notifications_enabled_message', user_id))
+        else:
+            await callback.message.answer(await get_text('notifications_disabled_message', user_id))
+        
+        # Update settings page
+        await cmd_settings(callback.message)
     
     await callback.answer()
 
@@ -720,7 +787,7 @@ async def process_balance_user_id(message: types.Message, state: FSMContext):
         name = f"{user['first_name'] or ''} {user['last_name'] or ''}".strip() or await get_text('name_none', message.from_user.id)
         
         await message.answer(
-            await get_text('user_info', message.from_user.id, name=name, username=username)
+            await get_text('user_info', message.from_user.id, name=name, username=username, balance=user['balance'])
         )
         
         await state.set_state(BalanceStates.waiting_for_amount)
@@ -909,6 +976,16 @@ async def analyze_callback(callback: types.CallbackQuery):
     # Extract news_id from callback data
     news_id = callback.data.split(":")[1]
     
+    # Check user balance first
+    user = await database.get_user(user_id)
+    if not user or user['balance'] < 0.01:
+        # Insufficient balance
+        await callback.answer()
+        await callback.message.reply(
+            await get_text('insufficient_balance', user_id, balance=user['balance'] if user else 0)
+        )
+        return
+    
     # Answer callback query to show processing
     await callback.answer(await get_text('analyzing', user_id))
     
@@ -925,13 +1002,25 @@ async def analyze_callback(callback: types.CallbackQuery):
     except Exception as e:
         print(f"Error removing keyboard: {e}")
     
+    # Charge user for analysis
+    success = await database.charge_user_for_analysis(user_id)
+    if not success:
+        # Double-check balance (in case it changed between checks)
+        await callback.message.reply(
+            await get_text('insufficient_balance', user_id, balance=(await database.get_user(user_id))['balance'])
+        )
+        return
+    
     # Perform price impact analysis
     from news_analyzer import analyze_price_impact
     impact_analysis = await analyze_price_impact(news_data['title'], news_data['summary'])
     
-    # Send the analysis result
+    # Send the analysis result with fee note
+    analysis_text = await get_text('analysis_fee', user_id)
+    analysis_text += f"<b>{await get_text('price_impact_analysis', user_id)}</b>\n\n{impact_analysis}"
+    
     await callback.message.reply(
-        f"<b>{await get_text('price_impact_analysis', user_id)}</b>\n\n{impact_analysis}", 
+        analysis_text, 
         parse_mode=ParseMode.HTML
     )
     
@@ -940,34 +1029,34 @@ async def analyze_callback(callback: types.CallbackQuery):
     await database.delete_callback_data(news_id)
 
 async def notify_about_important_news(news_items):
-    """Send notifications about important news to the specified user."""
-    global TELEGRAM_USER_ID
+    """Send notifications about important news to users who have enabled notifications."""
+    # Get all users with notifications enabled
+    users = await database.get_users_with_notifications_enabled()
     
-    # Check if TELEGRAM_USER_ID is set and valid
-    if not TELEGRAM_USER_ID:
-        print("Warning: TELEGRAM_USER_ID not set in environment variables")
+    if not users:
+        print("No users have notifications enabled.")
         return
     
-    # Ensure TELEGRAM_USER_ID is an integer
-    try:
-        user_id = int(TELEGRAM_USER_ID)
-    except (ValueError, TypeError):
-        print(f"Error: Invalid TELEGRAM_USER_ID format: {TELEGRAM_USER_ID}. Must be a numeric ID.")
-        return
+    print(f"Attempting to send notifications to {len(users)} users")
     
-    print(f"Attempting to send notifications to user ID: {user_id}")
-    
-    for news in news_items:
-        await send_news_notification(
-            bot,
-            user_id,
-            news['title'],
-            news['link'],
-            news['summary'],
-            news['source'],
-            news['importance_score'],
-            news.get('key_points')
-        )
+    for user in users:
+        user_id = user['user_id']
+        
+        for news in news_items:
+            try:
+                await send_news_notification(
+                    bot,
+                    user_id,
+                    news['title'],
+                    news['link'],
+                    news['summary'],
+                    news['source'],
+                    news['importance_score'],
+                    news.get('key_points')
+                )
+            except Exception as e:
+                print(f"Error sending notification to user {user_id}: {e}")
+                continue
 
 async def start_bot():
     """Start the bot polling."""

@@ -57,6 +57,7 @@ async def init_db():
             is_admin INTEGER DEFAULT 0,
             balance REAL DEFAULT 0.0,
             language TEXT DEFAULT 'uz',
+            notifications INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -294,4 +295,74 @@ async def set_user_language(user_id, language):
                 return False
     except Exception as e:
         print(f"Error setting user language: {e}")
+        return False
+
+async def get_user_notification_status(user_id):
+    """Get the notification status for a user."""
+    async with aiosqlite.connect(DATABASE_NAME) as db:
+        cursor = await db.execute('SELECT notifications FROM users WHERE user_id = ?', (user_id,))
+        result = await cursor.fetchone()
+        return result[0] if result else 1  # Default to enabled if not set
+
+async def set_user_notification_status(user_id, status):
+    """Update the notification status for a user."""
+    try:
+        status_int = 1 if status else 0
+        async with aiosqlite.connect(DATABASE_NAME) as db:
+            # Check if user exists
+            cursor = await db.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+            user = await cursor.fetchone()
+            
+            if user:
+                # Update notifications for existing user
+                await db.execute('''
+                UPDATE users 
+                SET notifications = ?, last_active_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                ''', (status_int, user_id))
+                await db.commit()
+                return True
+            else:
+                # User doesn't exist
+                return False
+    except Exception as e:
+        print(f"Error setting user notification status: {e}")
+        return False
+
+async def get_users_with_notifications_enabled():
+    """Get all users who have notifications enabled."""
+    async with aiosqlite.connect(DATABASE_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute('SELECT * FROM users WHERE notifications = 1')
+        return await cursor.fetchall()
+
+async def charge_user_for_analysis(user_id, amount=0.01):
+    """Charge a user for analysis. Returns True if successful, False if balance insufficient."""
+    try:
+        async with aiosqlite.connect(DATABASE_NAME) as db:
+            # Get current balance
+            cursor = await db.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,))
+            result = await cursor.fetchone()
+            
+            if not result:
+                return False
+                
+            current_balance = result[0]
+            
+            # Check if balance is sufficient
+            if current_balance < amount:
+                return False
+                
+            # Update balance
+            new_balance = current_balance - amount
+            await db.execute('''
+            UPDATE users 
+            SET balance = ?, last_active_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+            ''', (new_balance, user_id))
+            
+            await db.commit()
+            return True
+    except Exception as e:
+        print(f"Error charging user: {e}")
         return False

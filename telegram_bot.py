@@ -372,13 +372,14 @@ async def users_button(message: types.Message):
 @dp.message(Command("latest"))
 async def send_latest_news(message: types.Message):
     """Send the latest important news."""
-    news_items = await database.get_important_news(hours=24)
+    news_items = await database.get_important_news(hours=24, count=3)
     
     if not news_items:
         await message.answer(await get_text('no_news', message.from_user.id))
         return
     
-    for news in news_items:
+    # Faqat oxirgi 3 ta yangilikni yuborish
+    for news in news_items[:3]:
         await send_news_notification(
             bot,
             message.from_user.id,

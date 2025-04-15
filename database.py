@@ -121,7 +121,7 @@ async def set_importance_threshold(value):
     except ValueError as e:
         return False, str(e)
 
-async def get_important_news(hours=24, min_score=None):
+async def get_important_news(hours=24, min_score=None, count=5):
     """Get important news from the last N hours with a minimum score."""
     if min_score is None:
         min_score = await get_importance_threshold()
@@ -133,7 +133,8 @@ async def get_important_news(hours=24, min_score=None):
         WHERE importance_score >= ? 
         AND datetime(processed_at) >= datetime('now', ?) 
         ORDER BY importance_score DESC
-        ''', (min_score, f'-{hours} hours'))
+        LIMIT ?
+        ''', (min_score, f'-{hours} hours', count))
         return await cursor.fetchall()
 
 # New functions for callback cache

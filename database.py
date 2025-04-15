@@ -56,6 +56,7 @@ async def init_db():
             last_name TEXT,
             is_admin INTEGER DEFAULT 0,
             balance REAL DEFAULT 0.0,
+            language TEXT DEFAULT 'uz',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -178,7 +179,7 @@ async def delete_callback_data(news_id):
         print(f"Error deleting callback data: {e}")
 
 # User management functions
-async def save_user(user_id, username=None, first_name=None, last_name=None):
+async def save_user(user_id, username=None, first_name=None, last_name=None, language='uz'):
     """Save a new user or update existing user in the database."""
     try:
         admin_user_id = os.getenv("TELEGRAM_USER_ID")
@@ -186,10 +187,13 @@ async def save_user(user_id, username=None, first_name=None, last_name=None):
         
         async with aiosqlite.connect(DATABASE_NAME) as db:
             # Check if user exists
-            cursor = await db.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+            cursor = await db.execute('SELECT user_id, language FROM users WHERE user_id = ?', (user_id,))
             user = await cursor.fetchone()
             
             if user:
+                # Don't overwrite existing language setting
+                current_language = user[1]
+                
                 # Update existing user
                 await db.execute('''
                 UPDATE users 
@@ -199,9 +203,9 @@ async def save_user(user_id, username=None, first_name=None, last_name=None):
             else:
                 # Insert new user
                 await db.execute('''
-                INSERT INTO users (user_id, username, first_name, last_name, is_admin, created_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (user_id, username, first_name, last_name, is_admin))
+                INSERT INTO users (user_id, username, first_name, last_name, is_admin, language, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (user_id, username, first_name, last_name, is_admin, language))
             
             await db.commit()
             return True
@@ -260,3 +264,34 @@ async def count_users():
         cursor = await db.execute('SELECT COUNT(*) FROM users')
         result = await cursor.fetchone()
         return result[0] if result else 0
+
+async def get_user_language(user_id):
+    """Get the language setting for a user."""
+    async with aiosqlite.connect(DATABASE_NAME) as db:
+        cursor = await db.execute('SELECT language FROM users WHERE user_id = ?', (user_id,))
+        result = await cursor.fetchone()
+        return result[0] if result else 'uz'  # Default to Uzbek if not set
+
+async def set_user_language(user_id, language):
+    """Update the language setting for a user."""
+    try:
+        async with aiosqlite.connect(DATABASE_NAME) as db:
+            # Check if user exists
+            cursor = await db.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+            user = await cursor.fetchone()
+            
+            if user:
+                # Update language for existing user
+                await db.execute('''
+                UPDATE users 
+                SET language = ?, last_active_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                ''', (language, user_id))
+                await db.commit()
+                return True
+            else:
+                # User doesn't exist
+                return False
+    except Exception as e:
+        print(f"Error setting user language: {e}")
+        return False

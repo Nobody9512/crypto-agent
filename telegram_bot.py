@@ -1011,9 +1011,12 @@ async def analyze_callback(callback: types.CallbackQuery):
         )
         return
     
-    # Perform price impact analysis
+    # Get user language
+    language = await database.get_user_language(user_id)
+    
+    # Perform price impact analysis with user's language
     from news_analyzer import analyze_price_impact
-    impact_analysis = await analyze_price_impact(news_data['title'], news_data['summary'])
+    impact_analysis = await analyze_price_impact(news_data['title'], news_data['summary'], language)
     
     # Send the analysis result with fee note
     analysis_text = await get_text('analysis_fee', user_id)

@@ -106,11 +106,61 @@ async def analyze_news_importance(title, summary):
         # Default to moderate importance on error
         return 0.5
 
-async def analyze_price_impact(title, summary):
+async def analyze_price_impact(title, summary, language='uz'):
     """
     Analyze how the news could impact cryptocurrency prices for BTC, ETH, SOL, and LTC.
     Returns a detailed analysis of potential price movements.
+    
+    Args:
+        title (str): The news title
+        summary (str): The news summary
+        language (str): Language code (uz, ru, en)
     """
+    # Set language-specific instructions
+    language_instructions = {
+        'uz': "Provide a detailed analysis in UZBEK LANGUAGE with reasoning for each cryptocurrency's price prediction.",
+        'ru': "Provide a detailed analysis in RUSSIAN LANGUAGE with reasoning for each cryptocurrency's price prediction.",
+        'en': "Provide a detailed analysis in ENGLISH LANGUAGE with reasoning for each cryptocurrency's price prediction."
+    }
+    
+    # Set language-specific format guidance
+    format_instructions = {
+        'uz': """
+    Format your response as follows:
+    
+    Bitcoin (BTC): [prediction emoji] [short explanation in Uzbek]
+    Ethereum (ETH): [prediction emoji] [short explanation in Uzbek]
+    Solana (SOL): [prediction emoji] [short explanation in Uzbek]
+    Litecoin (LTC): [prediction emoji] [short explanation in Uzbek]
+    
+    Umumiy xulosa: [general conclusion about overall market impact in Uzbek]
+    """,
+        'ru': """
+    Format your response as follows:
+    
+    Bitcoin (BTC): [prediction emoji] [short explanation in Russian]
+    Ethereum (ETH): [prediction emoji] [short explanation in Russian]
+    Solana (SOL): [prediction emoji] [short explanation in Russian]
+    Litecoin (LTC): [prediction emoji] [short explanation in Russian]
+    
+    Общий вывод: [general conclusion about overall market impact in Russian]
+    """,
+        'en': """
+    Format your response as follows:
+    
+    Bitcoin (BTC): [prediction emoji] [short explanation in English]
+    Ethereum (ETH): [prediction emoji] [short explanation in English]
+    Solana (SOL): [prediction emoji] [short explanation in English]
+    Litecoin (LTC): [prediction emoji] [short explanation in English]
+    
+    General conclusion: [general conclusion about overall market impact in English]
+    """
+    }
+    
+    # Fallback to Uzbek if language not supported
+    if language not in language_instructions:
+        language = 'uz'
+    
     prompt = f"""
     Analyze the following cryptocurrency news and predict its potential impact on the prices of:
     1. Bitcoin (BTC)
@@ -128,15 +178,8 @@ async def analyze_price_impact(title, summary):
     Title: {title}
     Summary: {summary}
     
-    Provide a detailed analysis in UZBEK LANGUAGE with reasoning for each cryptocurrency's price prediction.
-    Format your response as follows:
-    
-    Bitcoin (BTC): [prediction emoji] [short explanation in Uzbek]
-    Ethereum (ETH): [prediction emoji] [short explanation in Uzbek]
-    Solana (SOL): [prediction emoji] [short explanation in Uzbek]
-    Litecoin (LTC): [prediction emoji] [short explanation in Uzbek]
-    
-    Umumiy xulosa: [general conclusion about overall market impact in Uzbek]
+    {language_instructions[language]}
+    {format_instructions[language]}
     """
     
     try:
@@ -157,7 +200,13 @@ async def analyze_price_impact(title, summary):
         return analysis
     except Exception as e:
         print(f"Error analyzing price impact: {e}")
-        return "⚠️ Tahlil qilishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring."
+        # Return error message in the requested language
+        error_messages = {
+            'uz': "⚠️ Tahlil qilishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.",
+            'ru': "⚠️ Произошла ошибка при анализе. Пожалуйста, повторите попытку позже.",
+            'en': "⚠️ Error analyzing the impact. Please try again later."
+        }
+        return error_messages.get(language, error_messages['uz'])
 
 async def process_news_entry(entry):
     """Process a single news entry from RSS feed."""

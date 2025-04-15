@@ -38,7 +38,7 @@ async def scheduler():
     """Har 5 daqiqada bir marta xabarlarni tekshiradi."""
     while running:
         await check_news()
-        await asyncio.sleep(60)  # 300 soniya = 5 daqiqa
+        await asyncio.sleep(300)  # 300 soniya = 5 daqiqa
 
 async def cleanup():
     """Botni toʻxtatishdan oldin resurslarni tozalaydi."""

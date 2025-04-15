@@ -46,6 +46,20 @@ async def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
+
+        # Users table for storing bot users
+        await db.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            is_admin INTEGER DEFAULT 0,
+            balance REAL DEFAULT 0.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
         
         # Initialize settings with default values if they don't exist
         await db.execute('''
@@ -162,3 +176,87 @@ async def delete_callback_data(news_id):
             await db.commit()
     except Exception as e:
         print(f"Error deleting callback data: {e}")
+
+# User management functions
+async def save_user(user_id, username=None, first_name=None, last_name=None):
+    """Save a new user or update existing user in the database."""
+    try:
+        admin_user_id = os.getenv("TELEGRAM_USER_ID")
+        is_admin = 1 if str(user_id) == admin_user_id else 0
+        
+        async with aiosqlite.connect(DATABASE_NAME) as db:
+            # Check if user exists
+            cursor = await db.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+            user = await cursor.fetchone()
+            
+            if user:
+                # Update existing user
+                await db.execute('''
+                UPDATE users 
+                SET username = ?, first_name = ?, last_name = ?, last_active_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                ''', (username, first_name, last_name, user_id))
+            else:
+                # Insert new user
+                await db.execute('''
+                INSERT INTO users (user_id, username, first_name, last_name, is_admin, created_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (user_id, username, first_name, last_name, is_admin))
+            
+            await db.commit()
+            return True
+    except Exception as e:
+        print(f"Error saving user: {e}")
+        return False
+
+async def get_all_users():
+    """Get all users from the database."""
+    async with aiosqlite.connect(DATABASE_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute('SELECT * FROM users ORDER BY created_at DESC')
+        return await cursor.fetchall()
+
+async def get_user(user_id):
+    """Get a user by user_id."""
+    async with aiosqlite.connect(DATABASE_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+        result = await cursor.fetchone()
+        return dict(result) if result else None
+
+async def update_user_balance(user_id, amount):
+    """Update user balance, adding or subtracting the specified amount."""
+    try:
+        async with aiosqlite.connect(DATABASE_NAME) as db:
+            await db.execute('''
+            UPDATE users 
+            SET balance = balance + ?, last_active_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+            ''', (amount, user_id))
+            await db.commit()
+            return True
+    except Exception as e:
+        print(f"Error updating user balance: {e}")
+        return False
+
+async def set_user_balance(user_id, new_balance):
+    """Set user balance to a specific amount."""
+    try:
+        async with aiosqlite.connect(DATABASE_NAME) as db:
+            await db.execute('''
+            UPDATE users 
+            SET balance = ?, last_active_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+            ''', (new_balance, user_id))
+            await db.commit()
+            return True
+    except Exception as e:
+        print(f"Error setting user balance: {e}")
+        return False
+
+async def count_users():
+    """Get the total count of users."""
+    async with aiosqlite.connect(DATABASE_NAME) as db:
+        cursor = await db.execute('SELECT COUNT(*) FROM users')
+        result = await cursor.fetchone()
+        return result[0] if result else 0

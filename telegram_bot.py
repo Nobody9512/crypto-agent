@@ -5,9 +5,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 import os
 import asyncio
+import aiosqlite
 from aiogram.enums import ParseMode
 from dotenv import load_dotenv
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 import database
 
 # Load environment variables
@@ -19,6 +20,11 @@ TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID")
 # States for setting threshold
 class ThresholdStates(StatesGroup):
     waiting_for_threshold = State()
+
+# States for setting user balance
+class BalanceStates(StatesGroup):
+    waiting_for_user_id = State()
+    waiting_for_amount = State()
 
 # Create memory storage for FSM
 storage = MemoryStorage()
@@ -43,7 +49,42 @@ async def initialize_bot():
 async def send_welcome(message: types.Message):
     """Send a welcome message when the command /start is issued."""
     user_id = message.from_user.id
-    await message.answer(f"Salom! Men crypto yangiliklari botiman. Sizning ID: {user_id}")
+    username = message.from_user.username
+    first_name = message.from_user.first_name
+    last_name = message.from_user.last_name
+    
+    # Save user to database
+    await database.save_user(user_id, username, first_name, last_name)
+    
+    # Create different UI for admin vs regular users
+    if str(user_id) == TELEGRAM_USER_ID:
+        # Admin keyboard
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="👥 Foydalanuvchilar")],
+                [KeyboardButton(text="⚙️ Sozlamalar"), KeyboardButton(text="📰 Oxirgi yangiliklar")]
+            ],
+            resize_keyboard=True
+        )
+        await message.answer(
+            f"Salom, Admin! Men crypto yangiliklari botiman. "
+            f"Sizning ID: {user_id}",
+            reply_markup=keyboard
+        )
+    else:
+        # Regular user keyboard
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📰 Oxirgi yangiliklar"), KeyboardButton(text="💰 Balans")],
+                [KeyboardButton(text="ℹ️ Yordam")]
+            ],
+            resize_keyboard=True
+        )
+        await message.answer(
+            f"Salom! Men crypto yangiliklari botiman. "
+            f"Sizning ID: {user_id}",
+            reply_markup=keyboard
+        )
     
 @dp.message(Command("help"))
 async def send_help(message: types.Message):
@@ -55,10 +96,128 @@ async def send_help(message: types.Message):
     /start - Botni ishga tushirish
     /help - Yordam ko'rsatish
     /latest - Oxirgi muhim yangiliklar
+    """
+    
+    # Add admin commands for admin users
+    if str(message.from_user.id) == TELEGRAM_USER_ID:
+        help_text += """
+    Admin buyruqlari:
     /current_threshold - Hozirgi muhimlik darajasini ko'rsatish
     /threshold - Muhimlik darajasini o'zgartirish (0.0-1.0)
-    """
+    /users - Foydalanuvchilar ro'yxati
+    /stats - Bot statistikasi
+    /set_balance - Foydalanuvchi balansini o'zgartirish
+        """
+    
     await message.answer(help_text)
+
+# Handle text buttons for command-like functionality
+@dp.message(F.text == "ℹ️ Yordam")
+async def help_button(message: types.Message):
+    await send_help(message)
+
+@dp.message(F.text == "📰 Oxirgi yangiliklar")
+async def latest_news_button(message: types.Message):
+    await send_latest_news(message)
+
+@dp.message(F.text == "💰 Balans")
+async def balance_button(message: types.Message):
+    user_id = message.from_user.id
+    user = await database.get_user(user_id)
+    
+    if user:
+        await message.answer(f"Sizning balans: {user['balance']} USDT")
+    else:
+        await message.answer("Siz hali ro'yxatdan o'tmagansiz. /start buyrug'ini yuborib ro'yxatdan o'ting.")
+
+# Admin panel buttons
+@dp.message(F.text == "📊 Statistika")
+async def stats_button(message: types.Message):
+    # Check if the user is admin
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        return
+    
+    # Get statistics
+    total_users = await database.count_users()
+    threshold = await database.get_importance_threshold()
+    
+    # Get news count from the last 24 hours
+    async with aiosqlite.connect(database.DATABASE_NAME) as db:
+        cursor = await db.execute('''
+        SELECT COUNT(*) FROM news 
+        WHERE datetime(processed_at) >= datetime('now', '-24 hours')
+        ''')
+        total_news = (await cursor.fetchone())[0]
+        
+        cursor = await db.execute('''
+        SELECT COUNT(*) FROM news 
+        WHERE importance_score >= ? AND datetime(processed_at) >= datetime('now', '-24 hours')
+        ''', (threshold,))
+        important_news = (await cursor.fetchone())[0]
+    
+    stats_text = f"""
+📊 <b>Bot Statistikasi</b>
+
+👥 Foydalanuvchilar soni: {total_users}
+📰 So'nggi 24 soat ichidagi yangiliklar: {total_news}
+🔔 Muhim yangiliklar (score >= {threshold:.2f}): {important_news}
+    """
+    
+    await message.answer(stats_text, parse_mode=ParseMode.HTML)
+
+@dp.message(F.text == "👥 Foydalanuvchilar")
+async def users_button(message: types.Message):
+    # Check if the user is admin
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        return
+    
+    # Get all users
+    users = await database.get_all_users()
+    
+    if not users:
+        await message.answer("Hozircha foydalanuvchilar yo'q.")
+        return
+    
+    # Prepare users list
+    users_text = "<b>👥 Foydalanuvchilar ro'yxati:</b>\n\n"
+    
+    for i, user in enumerate(users, 1):
+        username = user['username'] or "username yo'q"
+        name = f"{user['first_name'] or ''} {user['last_name'] or ''}".strip() or "ism yo'q"
+        admin_status = "👑 Admin" if user['is_admin'] else "👤 Foydalanuvchi"
+        balance = user['balance']
+        
+        users_text += f"{i}. {admin_status} | {name} (@{username})\n"
+        users_text += f"   ID: {user['user_id']} | Balans: {balance} USDT\n\n"
+    
+    # Add management options
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 Balans qo'shish", callback_data="admin:add_balance")],
+        [InlineKeyboardButton(text="🔄 Yangilash", callback_data="admin:refresh_users")]
+    ])
+    
+    await message.answer(users_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+@dp.message(F.text == "⚙️ Sozlamalar")
+async def settings_button(message: types.Message):
+    # Check if the user is admin
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        return
+    
+    # Get current threshold
+    threshold = await database.get_importance_threshold()
+    
+    settings_text = f"""
+⚙️ <b>Bot Sozlamalari</b>
+
+🔢 Muhimlik darajasi: {threshold:.2f}
+    """
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔢 Muhimlik darajasini o'zgartirish", callback_data="admin:set_threshold")]
+    ])
+    
+    await message.answer(settings_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
 @dp.message(Command("latest"))
 async def send_latest_news(message: types.Message):
@@ -152,6 +311,170 @@ Muhimlik darajasini o'zgartirish uchun /threshold buyrug'ini ishlating.
     """
     
     await message.answer(explanation, parse_mode=ParseMode.HTML)
+
+# Admin command for listing users
+@dp.message(Command("users"))
+async def cmd_users(message: types.Message):
+    """List all users."""
+    # Check if the user is admin
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        return
+    
+    await users_button(message)
+
+# Admin command for stats
+@dp.message(Command("stats"))
+async def cmd_stats(message: types.Message):
+    """Show bot statistics."""
+    # Check if the user is admin
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        return
+    
+    await stats_button(message)
+
+# Admin command for setting user balance
+@dp.message(Command("set_balance"))
+async def cmd_set_balance(message: types.Message, state: FSMContext):
+    """Set user balance."""
+    # Check if the user is admin
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        return
+    
+    await message.answer("Foydalanuvchi ID raqamini kiriting:")
+    await state.set_state(BalanceStates.waiting_for_user_id)
+
+@dp.message(BalanceStates.waiting_for_user_id)
+async def process_balance_user_id(message: types.Message, state: FSMContext):
+    """Process user ID for balance update."""
+    # Check if the user is admin
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        await state.clear()
+        return
+    
+    text = message.text.strip()
+    
+    # Check if this is a cancel request
+    if text.lower() in ['/cancel', 'cancel', 'bekor', 'bekor qilish', 'orqaga']:
+        await message.answer("🛑 Balans o'zgartirish amaliyoti bekor qilindi.")
+        await state.clear()
+        return
+    
+    try:
+        user_id = int(text)
+        user = await database.get_user(user_id)
+        
+        if not user:
+            await message.answer("❌ Bunday foydalanuvchi topilmadi. Qaytadan urinib ko'ring yoki bekor qilish uchun /cancel buyrug'ini yuboring.")
+            return
+        
+        # Store user_id in state
+        await state.update_data(user_id=user_id)
+        
+        # Show user info
+        username = user['username'] or "username yo'q"
+        name = f"{user['first_name'] or ''} {user['last_name'] or ''}".strip() or "ism yo'q"
+        
+        await message.answer(
+            f"Foydalanuvchi: {name} (@{username})\n"
+            f"Hozirgi balans: {user['balance']} USDT\n\n"
+            f"Yangi balans qiymatini kiriting yoki bekor qilish uchun /cancel buyrug'ini yuboring:"
+        )
+        
+        await state.set_state(BalanceStates.waiting_for_amount)
+    except ValueError:
+        await message.answer("❌ Xato: Foydalanuvchi ID raqami butun son bo'lishi kerak. Bekor qilish uchun /cancel buyrug'ini yuboring.")
+
+@dp.message(BalanceStates.waiting_for_amount)
+async def process_balance_amount(message: types.Message, state: FSMContext):
+    """Process amount for balance update."""
+    # Check if the user is admin
+    if str(message.from_user.id) != TELEGRAM_USER_ID:
+        await state.clear()
+        return
+    
+    text = message.text.strip()
+    
+    # Check if this is a cancel request
+    if text.lower() in ['/cancel', 'cancel', 'bekor', 'bekor qilish', 'orqaga']:
+        await message.answer("🛑 Balans o'zgartirish amaliyoti bekor qilindi.")
+        await state.clear()
+        return
+    
+    try:
+        amount = float(text)
+        
+        # Get user_id from state
+        data = await state.get_data()
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            await message.answer("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.")
+            await state.clear()
+            return
+        
+        # Update user balance
+        success = await database.set_user_balance(user_id, amount)
+        
+        if success:
+            # Get updated user info
+            user = await database.get_user(user_id)
+            username = user['username'] or "username yo'q"
+            name = f"{user['first_name'] or ''} {user['last_name'] or ''}".strip() or "ism yo'q"
+            
+            await message.answer(
+                f"✅ Foydalanuvchi balansi muvaffaqiyatli yangilandi:\n\n"
+                f"Foydalanuvchi: {name} (@{username})\n"
+                f"Yangi balans: {user['balance']} USDT"
+            )
+        else:
+            await message.answer("❌ Balansni yangilashda xatolik yuz berdi. Qaytadan urinib ko'ring.")
+        
+        await state.clear()
+    except ValueError:
+        await message.answer("❌ Xato: Balans son bo'lishi kerak. Bekor qilish uchun /cancel buyrug'ini yuboring.")
+
+# Handle cancel command for all states
+@dp.message(Command("cancel"))
+async def cmd_cancel(message: types.Message, state: FSMContext):
+    """Cancel current operation."""
+    current_state = await state.get_state()
+    
+    if current_state is not None:
+        await message.answer("🛑 Amal bekor qilindi.")
+        await state.clear()
+    else:
+        await message.answer("⚠️ Hech qanday amal bajarilmayapti.")
+
+# Admin callback handlers
+@dp.callback_query(F.data.startswith("admin:"))
+async def admin_callback_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Handle admin callbacks."""
+    # Check if the user is admin
+    if str(callback.from_user.id) != TELEGRAM_USER_ID:
+        await callback.answer("Bu amal faqat admin uchun.")
+        return
+    
+    action = callback.data.split(":")[1]
+    
+    if action == "refresh_users":
+        await callback.answer("Foydalanuvchilar ro'yxati yangilanmoqda...")
+        await users_button(callback.message)
+    
+    elif action == "add_balance":
+        await callback.answer("Balans qo'shish...")
+        await callback.message.answer("Foydalanuvchi ID raqamini kiriting:")
+        await state.set_state(BalanceStates.waiting_for_user_id)
+    
+    elif action == "set_threshold":
+        await callback.answer("Muhimlik darajasini o'zgartirish...")
+        current_threshold = await database.get_importance_threshold()
+        
+        await callback.message.answer(
+            f"Hozirgi muhimlik darajasi: {current_threshold:.2f}\n\n"
+            f"Yangi qiymatni kiriting (0.0-1.0 oralig'ida):"
+        )
+        
+        await state.set_state(ThresholdStates.waiting_for_threshold)
 
 async def send_news_notification(bot, user_id, title, link, summary, source, importance_score, key_points=None):
     """Send a notification about important crypto news."""

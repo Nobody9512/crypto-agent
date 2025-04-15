@@ -5,6 +5,7 @@ from openai import OpenAI
 import os
 from datetime import datetime
 import database
+from lang_translate import format_instructions, language_instructions
 
 # RSS feed sources
 RSS_SOURCES = {
@@ -114,48 +115,8 @@ async def analyze_price_impact(title, summary, language='uz'):
     Args:
         title (str): The news title
         summary (str): The news summary
-        language (str): Language code (uz, ru, en)
+        language (str): Language code (uz, ru, en, tr)
     """
-    # Set language-specific instructions
-    language_instructions = {
-        'uz': "Provide a detailed analysis in UZBEK LANGUAGE with reasoning for each cryptocurrency's price prediction.",
-        'ru': "Provide a detailed analysis in RUSSIAN LANGUAGE with reasoning for each cryptocurrency's price prediction.",
-        'en': "Provide a detailed analysis in ENGLISH LANGUAGE with reasoning for each cryptocurrency's price prediction."
-    }
-    
-    # Set language-specific format guidance
-    format_instructions = {
-        'uz': """
-    Format your response as follows:
-    
-    Bitcoin (BTC): [prediction emoji] [short explanation in Uzbek]
-    Ethereum (ETH): [prediction emoji] [short explanation in Uzbek]
-    Solana (SOL): [prediction emoji] [short explanation in Uzbek]
-    Litecoin (LTC): [prediction emoji] [short explanation in Uzbek]
-    
-    Umumiy xulosa: [general conclusion about overall market impact in Uzbek]
-    """,
-        'ru': """
-    Format your response as follows:
-    
-    Bitcoin (BTC): [prediction emoji] [short explanation in Russian]
-    Ethereum (ETH): [prediction emoji] [short explanation in Russian]
-    Solana (SOL): [prediction emoji] [short explanation in Russian]
-    Litecoin (LTC): [prediction emoji] [short explanation in Russian]
-    
-    Общий вывод: [general conclusion about overall market impact in Russian]
-    """,
-        'en': """
-    Format your response as follows:
-    
-    Bitcoin (BTC): [prediction emoji] [short explanation in English]
-    Ethereum (ETH): [prediction emoji] [short explanation in English]
-    Solana (SOL): [prediction emoji] [short explanation in English]
-    Litecoin (LTC): [prediction emoji] [short explanation in English]
-    
-    General conclusion: [general conclusion about overall market impact in English]
-    """
-    }
     
     # Fallback to Uzbek if language not supported
     if language not in language_instructions:
@@ -204,7 +165,8 @@ async def analyze_price_impact(title, summary, language='uz'):
         error_messages = {
             'uz': "⚠️ Tahlil qilishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.",
             'ru': "⚠️ Произошла ошибка при анализе. Пожалуйста, повторите попытку позже.",
-            'en': "⚠️ Error analyzing the impact. Please try again later."
+            'en': "⚠️ Error analyzing the impact. Please try again later.",
+            'tr': "⚠️ Hata analizinde. Lütfen daha sonra tekrar deneyin."
         }
         return error_messages.get(language, error_messages['uz'])
 
